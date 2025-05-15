@@ -1,0 +1,36 @@
+#:kivy 2.0.0
+
+<ImageLayerWidget>:
+    # 默认属性设置
+    do_rotation: False  # 禁用默认旋转
+    do_scale: False  # 禁用默认缩放
+    do_translation: True  # 允许移动
+
+<EditorCanvasWidget>:
+    # 设置背景颜色
+    canvas.before:
+        Color:
+            rgba: 0.2, 0.2, 0.2, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<Button>:
+    background_normal: ''
+    background_color: 0.3, 0.5, 0.8, 1
+    color: 1, 1, 1, 1
+    size_hint_min: 80, 40
+    font_size: '14sp'
+    
+<Label>:
+    color: 1, 1, 1, 1
+    font_size: '14sp'
+    
+# 主应用布局
+<ImageEditorApp>:
+    canvas.before:
+        Color:
+            rgba: 0.15, 0.15, 0.15, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size 

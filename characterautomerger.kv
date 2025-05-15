@@ -1,0 +1,374 @@
+#:kivy 2.0.0
+
+<MainLayout>:
+    orientation: 'horizontal'
+    spacing: dp(10)
+    padding: dp(10)
+    
+    # 属性绑定到Python对象中的ObjectProperty
+    lbl_template_file: lbl_template_file
+    lbl_head_file: lbl_head_file
+    lbl_body_file: lbl_body_file
+    preview_template: preview_template
+    preview_head: preview_head
+    preview_body: preview_body
+    drawing_canvas: drawing_canvas
+    step_controls_area: step_controls_area
+    status_bar: status_bar
+    center_panel_container: center_panel_container
+    prop_pos_x: prop_pos_x
+    prop_pos_y: prop_pos_y
+    prop_scale: prop_scale
+    prop_rotation: prop_rotation
+    polygon_points_list: polygon_points_list
+    btn_add_point: btn_add_point
+    btn_delete_point: btn_delete_point
+    
+    # 左侧面板 - 图像上传和控制
+    BoxLayout:
+        id: left_panel
+        orientation: 'vertical'
+        size_hint_x: 0.25
+        spacing: dp(10)
+        canvas.before:
+            Color:
+                rgba: 0.15, 0.15, 0.15, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+                
+        # 标题
+        Label:
+            text: "角色自动合成器"
+            size_hint_y: None
+            height: dp(40)
+            font_size: '18sp'
+            
+        # 上传控制区域
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            height: dp(350)
+            spacing: dp(5)
+            padding: dp(5)
+            canvas.before:
+                Color:
+                    rgba: 0.2, 0.2, 0.2, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+                    
+            Label:
+                text: "上传图片"
+                size_hint_y: None
+                height: dp(30)
+                font_size: '16sp'
+                
+            # 模板图像
+            BoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: None
+                height: dp(30)
+                spacing: dp(5)
+                
+                Label:
+                    id: lbl_template_file
+                    text: "模板: 未选择"
+                    size_hint_x: 0.7
+                    text_size: self.width, None
+                    halign: 'left'
+                    shorten: True
+                    shorten_from: 'right'
+                    
+                Button:
+                    text: "浏览"
+                    size_hint_x: 0.3
+                    on_release: app.open_file_chooser("template")
+                    
+            # 模板预览
+            Image:
+                id: preview_template
+                size_hint_y: None
+                height: dp(75)
+                allow_stretch: True
+                keep_ratio: True
+                
+            # 头部图像
+            BoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: None
+                height: dp(30)
+                spacing: dp(5)
+                
+                Label:
+                    id: lbl_head_file
+                    text: "头部: 未选择"
+                    size_hint_x: 0.7
+                    text_size: self.width, None
+                    halign: 'left'
+                    shorten: True
+                    shorten_from: 'right'
+                    
+                Button:
+                    text: "浏览"
+                    size_hint_x: 0.3
+                    on_release: app.open_file_chooser("head")
+                    
+            # 头部预览
+            Image:
+                id: preview_head
+                size_hint_y: None
+                height: dp(75)
+                allow_stretch: True
+                keep_ratio: True
+                
+            # 身体图像
+            BoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: None
+                height: dp(30)
+                spacing: dp(5)
+                
+                Label:
+                    id: lbl_body_file
+                    text: "身体: 未选择"
+                    size_hint_x: 0.7
+                    text_size: self.width, None
+                    halign: 'left'
+                    shorten: True
+                    shorten_from: 'right'
+                    
+                Button:
+                    text: "浏览"
+                    size_hint_x: 0.3
+                    on_release: app.open_file_chooser("body")
+                    
+            # 身体预览
+            Image:
+                id: preview_body
+                size_hint_y: None
+                height: dp(75)
+                allow_stretch: True
+                keep_ratio: True
+                
+        # 步骤控制区域
+        BoxLayout:
+            id: step_controls_area
+            orientation: 'vertical'
+            spacing: dp(5)
+            padding: dp(5)
+            canvas.before:
+                Color:
+                    rgba: 0.2, 0.2, 0.2, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            # 动态填充的区域，按钮会根据当前应用模式添加
+            
+        # 状态栏
+        Label:
+            id: status_bar
+            text: "准备就绪."
+            size_hint_y: None
+            height: dp(30)
+            text_size: self.width, None
+            halign: 'left'
+            valign: 'center'
+            canvas.before:
+                Color:
+                    rgba: 0.1, 0.1, 0.1, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+    
+    # 中央面板 - 主要编辑区域
+    BoxLayout:
+        id: center_panel_container
+        orientation: 'vertical'
+        size_hint_x: 0.5
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.1, 0.1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+                
+        DrawingCanvas:
+            id: drawing_canvas
+            size_hint: 1, 1
+    
+    # 右侧面板 - 属性编辑
+    BoxLayout:
+        id: right_panel
+        orientation: 'vertical'
+        size_hint_x: 0.25
+        spacing: dp(10)
+        canvas.before:
+            Color:
+                rgba: 0.15, 0.15, 0.15, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+                
+        # 用于在多种功能间切换的TabView
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: 1
+            
+            # 分割点编辑（在分割调整模式下可见）
+            BoxLayout:
+                id: polygon_edit_panel
+                orientation: 'vertical'
+                size_hint_y: 1
+                spacing: dp(5)
+                padding: dp(5)
+                canvas.before:
+                    Color:
+                        rgba: 0.2, 0.2, 0.2, 1
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                
+                Label:
+                    text: "分割点编辑"
+                    size_hint_y: None
+                    height: dp(30)
+                    font_size: '16sp'
+                
+                # 点列表
+                Label:
+                    text: "点坐标列表:"
+                    size_hint_y: None
+                    height: dp(20)
+                    font_size: '14sp'
+                    halign: 'left'
+                
+                ScrollView:
+                    do_scroll_x: False
+                    do_scroll_y: True
+                    
+                    BoxLayout:
+                        id: polygon_points_list
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(2)
+                
+                # 点操作按钮
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(44)
+                    spacing: dp(5)
+                    
+                    Button:
+                        id: btn_add_point
+                        text: "添加点"
+                        on_release: app.add_polygon_point()
+                    
+                    Button:
+                        id: btn_delete_point
+                        text: "删除点"
+                        on_release: app.delete_polygon_point()
+            
+            # 属性编辑（在部件编辑模式下可见）
+            BoxLayout:
+                id: part_properties_panel
+                orientation: 'vertical'
+                size_hint_y: 1
+                spacing: dp(5)
+                padding: dp(5)
+                canvas.before:
+                    Color:
+                        rgba: 0.2, 0.2, 0.2, 1
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                
+                Label:
+                    text: "属性"
+                    size_hint_y: None
+                    height: dp(30)
+                    font_size: '16sp'
+                
+                # 位置X
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(30)
+                    
+                    Label:
+                        text: "位置 X:"
+                        size_hint_x: 0.3
+                        
+                    TextInput:
+                        id: prop_pos_x
+                        size_hint_x: 0.7
+                        multiline: False
+                        input_filter: 'float'
+                        
+                # 位置Y
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(30)
+                    
+                    Label:
+                        text: "位置 Y:"
+                        size_hint_x: 0.3
+                        
+                    TextInput:
+                        id: prop_pos_y
+                        size_hint_x: 0.7
+                        multiline: False
+                        input_filter: 'float'
+                        
+                # 缩放
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(30)
+                    
+                    Label:
+                        text: "缩放:"
+                        size_hint_x: 0.3
+                        
+                    TextInput:
+                        id: prop_scale
+                        size_hint_x: 0.7
+                        multiline: False
+                        input_filter: 'float'
+                        text: "1.0"
+                        
+                # 旋转
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(30)
+                    
+                    Label:
+                        text: "旋转:"
+                        size_hint_x: 0.3
+                        
+                    TextInput:
+                        id: prop_rotation
+                        size_hint_x: 0.7
+                        multiline: False
+                        input_filter: 'float'
+                        text: "0.0"
+                        
+                # 操作按钮
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(44)
+                    spacing: dp(5)
+                    
+                    Button:
+                        text: "应用"
+                        on_release: app.apply_part_properties()
+                        
+                    Button:
+                        text: "重置"
+                        on_release: app.reset_part_properties() 
