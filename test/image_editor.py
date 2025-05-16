@@ -16,6 +16,7 @@ from kivy.graphics.transformation import Matrix
 from kivy.clock import Clock
 from kivy.uix.slider import Slider
 from kivy.uix.checkbox import CheckBox
+from kivy.lang import Builder
 
 try:
     from plyer import filechooser
@@ -59,14 +60,6 @@ class ImageLayerWidget(ScatterLayout):
         # 确保图像已加载纹理
         if self.image.texture:
             self.size = self.image.texture_size
-            print(f"图像已加载: {source}，大小: {self.size}")
-        else:
-            print(f"警告: 图像纹理未加载: {source}")
-            # 设置一个默认大小
-            self.size = (300, 300)
-            
-            # 绑定纹理加载完成事件
-            self.image.bind(texture=self._on_texture_loaded)
             
         self.add_widget(self.image)
         self.image.size = self.size
@@ -248,54 +241,6 @@ class ImageLayerWidget(ScatterLayout):
                     print(f"检测到旋转操作: 中心点距离={rotation_handle_dist}, 开始旋转")
                     touch.grab(self)
                     return True
-                    
-                # 检查是否触摸形变点 - 使用更宽松的距离检测
-                # 定义四个角点，使用实际图像边界
-                handle_size = self.handle_size * 1.5  # 增大检测范围
-                handle_points = [
-                    (img_x, img_y, 'BL'),                           # 左下
-                    (img_x + img_width, img_y, 'BR'),               # 右下
-                    (img_x, img_y + img_height, 'TL'),              # 左上
-                    (img_x + img_width, img_y + img_height, 'TR')   # 右上
-                ]
-                
-                # 找到距离最近的控制点
-                closest_corner = None
-                min_dist = float('inf')
-                
-                for x, y, corner in handle_points:
-                    dist = math.sqrt((local_touch[0] - x) ** 2 + (local_touch[1] - y) ** 2)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest_corner = (x, y, corner)
-                
-                # 如果最近的控制点在检测范围内，启动形变
-                if min_dist <= handle_size:
-                    x, y, corner = closest_corner
-                    self._drag_mode = f'scale_{corner}'
-                    print(f"检测到形变操作: 角点={corner}, 距离={min_dist}, 开始形变")
-                    
-                    # 存储初始数据用于形变计算
-                    self._initial_touch_data = {
-                        'size': self.size[:],
-                        'pos': self.pos[:],
-                        'touch_pos': touch.pos,
-                        'local_touch': local_touch,
-                        'rotation': self.rotation,
-                        'scale': self.scale,
-                        'center': self.center[:],
-                        'corner': (x, y),
-                        'img_offset': (img_x, img_y),
-                        'img_size': (img_width, img_height),
-                        'texture_size': self.image.texture.size if self.image and self.image.texture else None,
-                        'opposite_corner': (
-                            img_x + img_width - x if x == img_x else img_x - x,
-                            img_y + img_height - y if y == img_y else img_y - y
-                        ),
-                        'aspect_ratio': img_width / max(0.1, img_height)  # 防止除零错误
-                    }
-                    touch.grab(self)
-                    return True
             
             # 如果未检测到控制点操作，则执行移动操作
             print("未检测到控制点操作，准备执行移动")
@@ -330,185 +275,6 @@ class ImageLayerWidget(ScatterLayout):
                 # 减少日志输出
                 # print(f"旋转: 初始角度={initial_angle:.2f}, 当前角度={angle:.2f}, 新旋转值={new_rotation:.2f}")
                 self.rotation = new_rotation
-                return True
-                
-            elif self._drag_mode and self._drag_mode.startswith('scale_'):
-                # 处理形变
-                is_shift_pressed = 'shift' in Window.modifiers
-                
-                # 获取初始数据
-                corner_name = self._drag_mode[6:]  # 'scale_TR' -> 'TR'
-                initial_pos = self._initial_touch_data['pos']
-                initial_size = self._initial_touch_data['size'] # 图层初始尺寸
-                initial_img_offset = self._initial_touch_data.get('img_offset', (0, 0))
-                initial_img_size = self._initial_touch_data.get('img_size', initial_size) # 图像内容初始尺寸
-                texture_size = self._initial_touch_data.get('texture_size')
-                
-                img_content_initial_width = initial_img_size[0]
-                img_content_initial_height = initial_img_size[1]
-
-                # 获取图像在图层中的偏移量
-                img_x, img_y = initial_img_offset
-                # img_width, img_height = initial_img_size # 使用 initial_img_size 替代，避免混淆
-                
-                # 减少日志输出
-                # print(f"形变移动: 全局位置={touch.pos}, 图层初始位置={initial_pos}, 初始尺寸={initial_size}")
-                # print(f"图像偏移: ({img_x}, {img_y}), 图像尺寸: {initial_img_size}")
-                
-                # 根据不同的控制点计算新的图层尺寸和位置
-                if corner_name == 'BL':  # 左下角，右上角固定
-                    # 计算右上角的绝对坐标（固定点 - 图像内容的右上角）
-                    fixed_x = initial_pos[0] + img_x + img_content_initial_width
-                    fixed_y = initial_pos[1] + img_y + img_content_initial_height
-                    
-                    # 计算新的图像内容尺寸
-                    new_content_width = fixed_x - touch.x
-                    new_content_height = fixed_y - touch.y
-                    # new_x = touch.x # 新的图像内容左下角 X
-                    # new_y = touch.y # 新的图像内容左下角 Y
-                    
-                elif corner_name == 'BR':  # 右下角，左上角固定
-                    # 左上角固定 (图像内容的左上角)
-                    fixed_x = initial_pos[0] + img_x
-                    fixed_y = initial_pos[1] + img_y + img_content_initial_height
-                    
-                    # 新的图像内容尺寸
-                    new_content_width = touch.x - fixed_x
-                    new_content_height = fixed_y - touch.y
-                    # new_x = fixed_x
-                    # new_y = touch.y
-                    
-                elif corner_name == 'TL':  # 左上角，右下角固定
-                    # 右下角固定 (图像内容的右下角)
-                    fixed_x = initial_pos[0] + img_x + img_content_initial_width
-                    fixed_y = initial_pos[1] + img_y
-                    
-                    # 新的图像内容尺寸
-                    new_content_width = fixed_x - touch.x
-                    new_content_height = touch.y - fixed_y
-                    # new_x = touch.x
-                    # new_y = fixed_y
-                    
-                else:  # 'TR', 右上角，左下角固定
-                    # 左下角固定 (图像内容的左下角)
-                    fixed_x = initial_pos[0] + img_x
-                    fixed_y = initial_pos[1] + img_y
-                    
-                    # 新的图像内容尺寸
-                    new_content_width = touch.x - fixed_x
-                    new_content_height = touch.y - fixed_y
-                    # new_x = fixed_x
-                    # new_y = fixed_y
-                
-                # 保持等比例缩放（如果按下了Shift键）
-                if is_shift_pressed and texture_size:
-                    tex_width, tex_height = texture_size
-                    aspect_ratio = tex_width / max(0.1, tex_height)
-                    
-                    # 临时内容宽度/高度用于比较
-                    temp_new_content_width = new_content_width
-                    temp_new_content_height = new_content_height
-
-                    # 根据移动距离的主导方向调整尺寸
-                    # 使用初始内容尺寸进行比较，更稳定
-                    width_scale_factor = temp_new_content_width / img_content_initial_width
-                    height_scale_factor = temp_new_content_height / img_content_initial_height
-                    
-                    if abs(width_scale_factor - 1) > abs(height_scale_factor - 1): # 判断哪个方向的形变更显著
-                        # 宽度变化更大，以宽度为准
-                        new_content_height = temp_new_content_width / aspect_ratio
-                    else:
-                        # 高度变化更大，以高度为准
-                        new_content_width = temp_new_content_height * aspect_ratio
-                    
-                    # 调整位置以保持固定点不变 (这部分是针对 new_x, new_y 的，它们是图像内容的角点)
-                    # 对于BL, BR, TL, TR, 其 new_x, new_y (图像内容的活动角点) 就是 touch.x, touch.y 或 fixed_x, fixed_y
-                    # 这部分不需要调整 new_x, new_y，因为它们是由 fixed_x/y 和 touch.x/y 直接决定的
-                    # 而是 new_layer_x/y 的计算会基于新的 new_content_width/height 来正确定位图层
-                    pass # new_x, new_y (content corner) adjustments are implicit in fixed points and touch
-
-                # 确保内容尺寸为正
-                min_dimension = 10
-                if new_content_width < min_dimension:
-                    if corner_name in ['BL', 'TL']: # 左侧角点，固定右边
-                        # fixed_x 是右边缘, new_content_width = fixed_x - touch.x
-                        # touch.x = fixed_x - new_content_width
-                        pass # new_content_width 会直接被设为 min_dimension
-                    new_content_width = min_dimension
-                
-                if new_content_height < min_dimension:
-                    if corner_name in ['BL', 'BR']: # 底部角点，固定上边
-                        # fixed_y 是上边缘, new_content_height = fixed_y - touch.y
-                        # touch.y = fixed_y - new_content_height
-                        pass # new_content_height 会直接被设为 min_dimension
-                    new_content_height = min_dimension
-                
-                # 减少日志输出
-                # print(f"形变计算: 角点={corner_name}, 固定点=({fixed_x:.1f}, {fixed_y:.1f})")
-                # print(f"新内容尺寸: 宽度={new_content_width:.1f}, 高度={new_content_height:.1f}")
-                
-                new_layer_width = 0
-                new_layer_height = 0
-
-                if img_content_initial_width > 0 and img_content_initial_height > 0 : # 避免除零
-                    scale_w = new_content_width / img_content_initial_width
-                    scale_h = new_content_height / img_content_initial_height
-                    
-                    # 应用缩放到图层 - 使用初始图层尺寸
-                    new_layer_width = initial_size[0] * scale_w
-                    new_layer_height = initial_size[1] * scale_h
-                else: # 如果初始内容尺寸为0，则无法计算比例，直接使用新内容尺寸作为图层尺寸
-                    new_layer_width = new_content_width
-                    new_layer_height = new_content_height
-
-                # 确保图层尺寸不小于内容尺寸（通常图层会等比例放大，所以这一步可能多余，但保留以防万一）
-                # new_layer_width = max(new_content_width, new_layer_width)
-                # new_layer_height = max(new_content_height, new_layer_height)
-                
-                # 确保图层尺寸不小于最小尺寸
-                new_layer_width = max(min_dimension, new_layer_width)
-                new_layer_height = max(min_dimension, new_layer_height)
-
-                # 根据控制点和新的图层尺寸计算图层的新位置 (self.pos)
-                new_layer_x = 0
-                new_layer_y = 0
-                if corner_name == 'BL': # 左下角被拖动，图层右上角固定（基于图像内容的初始右上角）
-                    # fixed_x, fixed_y 是图像内容初始右上角全局坐标
-                    new_layer_x = fixed_x - new_layer_width 
-                    new_layer_y = fixed_y - new_layer_height
-                elif corner_name == 'BR': # 右下角被拖动，图层左上角固定
-                    # fixed_x, fixed_y 是图像内容初始左上角全局坐标
-                    new_layer_x = fixed_x
-                    new_layer_y = fixed_y - new_layer_height 
-                elif corner_name == 'TL': # 左上角被拖动，图层右下角固定
-                    # fixed_x, fixed_y 是图像内容初始右下角全局坐标
-                    new_layer_x = fixed_x - new_layer_width
-                    new_layer_y = fixed_y
-                else:  # 'TR', 右上角被拖动，图层左下角固定
-                    # fixed_x, fixed_y 是图像内容初始左下角全局坐标
-                    new_layer_x = fixed_x
-                    new_layer_y = fixed_y
-                
-                # 应用新尺寸和位置到图层
-                self.size = (new_layer_width, new_layer_height)
-                self.pos = (new_layer_x, new_layer_y)
-                
-                # 更新图像尺寸以适应图层
-                if self.image:
-                    if texture_size:
-                        # 重新计算图像尺寸，保持适当的宽高比
-                        # tex_width, tex_height = texture_size
-                        # tex_ratio = tex_width / max(0.1, tex_height) # 已有 aspect_ratio
-                        
-                        # 根据新的图层尺寸，重新计算适合的图像尺寸
-                        fitted_size = self._calculate_fitted_size(texture_size, self.size)
-                        self.image.size = fitted_size
-                    else:
-                        # 如果无法获取纹理尺寸，设置为图层尺寸
-                        self.image.size = self.size
-                
-                # 更新控制点
-                self.update_canvas()
                 return True
             
             # 如果没有特定的拖拽模式，执行默认的移动
@@ -562,6 +328,64 @@ class ImageLayerWidget(ScatterLayout):
         
         return False
 
+    def transform_size(self, base_width, base_height, scale_x=None, scale_y=None, lock_aspect_ratio=False):
+        """统一处理图层形变的函数
+        
+        参数:
+            base_width: X轴的基准宽度
+            base_height: Y轴的基准高度
+            scale_x: X轴的缩放比例，None表示不改变
+            scale_y: Y轴的缩放比例，None表示不改变
+            lock_aspect_ratio: 是否锁定宽高比
+        
+        返回:
+            tuple: (new_width, new_height) 形变后的新尺寸
+            bool: 操作是否成功
+        """
+        if base_width <= 0 or base_height <= 0:
+            print("无法进行形变：基准尺寸无效")
+            return None, False
+            
+        old_width, old_height = self.size
+        old_center_x = self.x + old_width / 2
+        old_center_y = self.y + old_height / 2
+        
+        # 计算新尺寸
+        new_width = old_width
+        new_height = old_height
+        
+        # 如果提供了X缩放比例
+        if scale_x is not None:
+            new_width = base_width * scale_x
+            
+            # 检查是否需要保持宽高比
+            if lock_aspect_ratio and base_height > 0:
+                aspect_ratio = base_width / base_height
+                if aspect_ratio > 0:  # 避免除以零
+                    new_height = new_width / aspect_ratio
+        
+        # 如果提供了Y缩放比例
+        if scale_y is not None:
+            new_height = base_height * scale_y
+            
+            # 检查是否需要保持宽高比
+            if lock_aspect_ratio and base_width > 0:
+                aspect_ratio = base_width / base_height
+                if aspect_ratio > 0:  # 避免除以零
+                    new_width = new_height * aspect_ratio
+        
+        # 确保尺寸不小于最小值
+        min_dimension = 10
+        new_width = max(new_width, min_dimension)
+        new_height = max(new_height, min_dimension)
+        
+        # 应用新尺寸，保持图层中心点不变
+        self.size = (new_width, new_height)
+        self.pos = (old_center_x - new_width / 2, old_center_y - new_height / 2)
+        
+        print(f"应用新尺寸: 宽度={new_width}, 高度={new_height}, 位置={self.pos}")
+        return (new_width, new_height), True
+
 
 class EditorCanvasWidget(RelativeLayout):
     """编辑器画布，作为所有图层的容器"""
@@ -574,6 +398,8 @@ class EditorCanvasWidget(RelativeLayout):
     def __init__(self, **kwargs):
         super(EditorCanvasWidget, self).__init__(**kwargs)
         self.layers = []
+        self._skip_next_resize = False  # 添加标记，用于协调窗口大小变化时的更新
+        
         # 添加画布边界视觉提示
         with self.canvas.before:
             Color(0.1, 0.1, 0.1, 1)  # 画布背景色
@@ -590,22 +416,24 @@ class EditorCanvasWidget(RelativeLayout):
         self.bind(size=self._update_canvas_display, pos=self._update_canvas_display)
     
     def _update_canvas_display(self, *args):
-        """更新画布显示，确保边界矩形始终可见"""
+        """更新画布显示，确保边界矩形始终可见，并相应更新所有图层位置"""
         if hasattr(self, '_bg_rect'):
             self._bg_rect.pos = self.pos
             self._bg_rect.size = self.size
         
         if hasattr(self, '_border_rect'):
-            # 计算缩放比例，确保画布边界完全显示在窗口中并居中
+            # 记录旧的画布位置和大小
+            old_pos = getattr(self, '_last_border_pos', (0, 0))
+            old_size = getattr(self, '_last_border_size', (0, 0))
+            
+            # 计算缩放比例
             scale_x = self.width / self.CANVAS_WIDTH
             scale_y = self.height / self.CANVAS_HEIGHT
             scale = min(scale_x, scale_y)
             
-            # 计算缩放后的实际画布尺寸
+            # 计算新的画布尺寸和位置
             display_width = self.CANVAS_WIDTH * scale
             display_height = self.CANVAS_HEIGHT * scale
-            
-            # 计算位置偏移，使画布居中
             offset_x = (self.width - display_width) / 2
             offset_y = (self.height - display_height) / 2
             
@@ -613,7 +441,18 @@ class EditorCanvasWidget(RelativeLayout):
             self._border_rect.pos = (offset_x, offset_y)
             self._border_rect.size = (display_width, display_height)
             
-            print(f"画布显示更新: 缩放比例={scale}, 位置={self._border_rect.pos}, 大小={self._border_rect.size}")
+            # 记录新的位置和大小
+            self._last_border_pos = (offset_x, offset_y)
+            self._last_border_size = (display_width, display_height)
+            
+            # 计算位置偏移量
+            dx = offset_x - old_pos[0]
+            dy = offset_y - old_pos[1]
+            
+            # 更新所有图层的位置，保持相对位置不变
+            if dx != 0 or dy != 0:
+                for layer in self.layers:
+                    layer.pos = (layer.x + dx, layer.y + dy)
     
     def add_image_as_layer(self, image_path):
         """添加新图层并加载图像"""
@@ -694,6 +533,14 @@ class EditorCanvasWidget(RelativeLayout):
     
     def _on_window_resize(self, instance, width, height):
         """当窗口大小改变时，更新画布显示和所有图层的位置"""
+        # 检查是否应该跳过本次更新
+        if hasattr(self, '_skip_next_resize') and self._skip_next_resize:
+            self._skip_next_resize = False
+            return
+            
+        # 设置标记，避免_update_layout再次触发更新
+        self._skip_next_resize = True
+            
         # 更新画布边界显示
         self._update_canvas_display()
         
@@ -841,137 +688,25 @@ class ImageEditorApp(App):
     slider_x = ObjectProperty(None)
     slider_y = ObjectProperty(None)
     lock_aspect_ratio_checkbox = ObjectProperty(None)
+    editor_canvas = ObjectProperty(None)
 
     def build(self):
-        # 创建根布局
-        root = FloatLayout()
+        # 加载kv文件
+        from kivy.lang import Builder
         
-        # 创建编辑画布 - 修复位置问题，为画布和工具栏使用绝对位置
-        self.editor_canvas = EditorCanvasWidget()
-        
-        # 添加标题
-        title = Label(
-            text='Kivy Image Editor', 
-            size_hint=(1, None),
-            height=dp(30),
-            pos_hint={'x': 0, 'top': 1},
-            font_size='20sp'
-        )
-        
-        # 计算主要区域的高度 (总高度减去标题和工具栏)
-        canvas_height = Window.height - dp(30) - dp(60)  # 标题30dp, 工具栏60dp
-        
-        # 设置画布位置和大小
-        self.editor_canvas.size_hint = (1, None)
-        self.editor_canvas.height = canvas_height
-        self.editor_canvas.pos_hint = {'x': 0, 'top': 1 - dp(30)/Window.height}
-        
-        # 创建工具栏，使用固定高度而不是相对高度
-        toolbar = BoxLayout(
-            orientation='horizontal',
-            size_hint=(1, None),
-            height=dp(60),
-            pos_hint={'x': 0, 'bottom': 0},
-            spacing=5,
-            padding=5
-        )
-        
-        # 添加加载图像按钮
-        load_btn = Button(
-            text='Load Image', 
-            size_hint=(0.2, 1)
-        )
-        load_btn.bind(on_press=self.open_file_dialog)
-        toolbar.add_widget(load_btn)
-        
-        # 添加图层操作按钮
-        layer_controls = BoxLayout(orientation='vertical', size_hint=(0.2, 1))
-        
-        # 图层顺序控制
-        order_controls = BoxLayout(orientation='horizontal', size_hint=(1, 0.5))
-        
-        up_btn = Button(text='Move Up')
-        up_btn.bind(on_press=lambda x: self.editor_canvas.move_selected_layer_up())
-        order_controls.add_widget(up_btn)
-        
-        down_btn = Button(text='Move Down')
-        down_btn.bind(on_press=lambda x: self.editor_canvas.move_selected_layer_down())
-        order_controls.add_widget(down_btn)
-        
-        layer_controls.add_widget(order_controls)
-        
-        # 图层显示和删除控制
-        visibility_controls = BoxLayout(orientation='horizontal', size_hint=(1, 0.5))
-        
-        toggle_vis_btn = Button(text='Show/Hide')
-        toggle_vis_btn.bind(on_press=lambda x: self.editor_canvas.toggle_selected_layer_visibility())
-        visibility_controls.add_widget(toggle_vis_btn)
-        
-        delete_btn = Button(text='Delete')
-        delete_btn.bind(on_press=lambda x: self.editor_canvas.delete_selected_layer())
-        visibility_controls.add_widget(delete_btn)
-        
-        layer_controls.add_widget(visibility_controls)
-        toolbar.add_widget(layer_controls)
-        
-        # --- 新增缩放控制 ---
-        scaling_controls_layout = BoxLayout(orientation='vertical', size_hint_x=0.3, spacing=dp(2))
-
-        # X Scale Slider
-        x_scale_row = BoxLayout(size_hint_y=None, height=dp(25))
-        x_scale_label = Label(text='Scale X:', size_hint_x=0.3, font_size='12sp')
-        self.slider_x = Slider(min=0.1, max=3, value=1.0, size_hint_x=0.7, disabled=True)
-        self.slider_x.bind(value=self.on_slider_x_value)
-        x_scale_row.add_widget(x_scale_label)
-        x_scale_row.add_widget(self.slider_x)
-        scaling_controls_layout.add_widget(x_scale_row)
-
-        # Y Scale Slider
-        y_scale_row = BoxLayout(size_hint_y=None, height=dp(25))
-        y_scale_label = Label(text='Scale Y:', size_hint_x=0.3, font_size='12sp')
-        self.slider_y = Slider(min=0.1, max=3, value=1.0, size_hint_x=0.7, disabled=True)
-        self.slider_y.bind(value=self.on_slider_y_value)
-        y_scale_row.add_widget(y_scale_label)
-        y_scale_row.add_widget(self.slider_y)
-        scaling_controls_layout.add_widget(y_scale_row)
-        
-        # Lock Aspect Ratio Checkbox
-        lock_row = BoxLayout(size_hint_y=None, height=dp(25)) # Even smaller height for checkbox row
-        self.lock_aspect_ratio_checkbox = CheckBox(active=False, size_hint_x=0.2, disabled=True)
-        # 绑定勾选框状态变化事件
-        self.lock_aspect_ratio_checkbox.bind(active=self.on_lock_aspect_ratio_change)
-        lock_label = Label(text='Lock Aspect Ratio', size_hint_x=0.8, font_size='12sp')
-        lock_row.add_widget(self.lock_aspect_ratio_checkbox)
-        lock_row.add_widget(lock_label)
-        scaling_controls_layout.add_widget(lock_row)
-        
-        toolbar.add_widget(scaling_controls_layout)
-        # --- 结束新增缩放控制 ---
-        
-        # 添加使用说明
-        help_text = Label(
-            text='Instructions:\n· Click to select layer\n· Drag to move\n· Drag center point to rotate\n· Drag corners to resize\n· Hold Shift for proportional scaling',
-            size_hint=(0.4, 1),
-            halign='left',
-            valign='middle'
-        )
-        help_text.bind(size=self._update_text_size)
-        toolbar.add_widget(help_text)
-        
-        # 按照从下到上的顺序添加元素，确保正确的堆叠顺序
-        root.add_widget(toolbar)
-        root.add_widget(self.editor_canvas)
-        root.add_widget(title)
+        # 创建根控件 - 使用正确的方法
+        root = Builder.load_file('image_editor.kv')
         
         # 绑定窗口大小变化事件，以便在窗口调整大小时更新布局
         Window.bind(on_resize=self._update_layout)
         
-        # 打印调试信息，检查控件初始状态
-        print(f"滑块X初始状态: disabled={self.slider_x.disabled}, value={self.slider_x.value}")
-        print(f"滑块Y初始状态: disabled={self.slider_y.disabled}, value={self.slider_y.value}")
-        print(f"锁定比例复选框: disabled={self.lock_aspect_ratio_checkbox.disabled}, active={self.lock_aspect_ratio_checkbox.active}")
+        # 手动获取对组件的引用
+        self.editor_canvas = root.ids.editor_canvas
+        self.slider_x = root.ids.slider_x
+        self.slider_y = root.ids.slider_y
+        self.lock_aspect_ratio_checkbox = root.ids.lock_aspect_ratio_checkbox
         
-        # 初始化滑块状态 - 确保在启动时滑块被禁用
+        # 初始化滑块状态
         self._base_width_for_slider_scale = 0.0
         self._base_height_for_slider_scale = 0.0
         self.slider_x.disabled = True
@@ -979,15 +714,18 @@ class ImageEditorApp(App):
         self.lock_aspect_ratio_checkbox.disabled = True
         
         # 初始化当前没有选中的图层
-        self.editor_canvas.select_layer(None)
+        Clock.schedule_once(lambda dt: self.editor_canvas.select_layer(None), 0.1)
         
         print("应用初始化完成，缩放控件已设置为禁用状态")
         
         return root
     
-    def _update_text_size(self, instance, size):
-        """更新Label的text_size以适应其大小"""
-        instance.text_size = (instance.width, None)
+    def _update_layout(self, instance, width, height):
+        """当窗口大小改变时更新布局"""
+        # 更新画布高度
+        canvas_height = height - dp(30) - dp(60)  # 标题30dp, 工具栏60dp
+        self.editor_canvas.height = canvas_height
+        self.editor_canvas.pos_hint = {'x': 0, 'top': 1 - dp(30)/height}
     
     def open_file_dialog(self, instance):
         """打开文件选择对话框"""
@@ -1011,53 +749,15 @@ class ImageEditorApp(App):
             for file_path in selection:
                 self.editor_canvas.add_image_as_layer(file_path)
     
-    def _update_layout(self, instance, width, height):
-        """当窗口大小改变时更新布局"""
-        # 更新画布高度
-        canvas_height = height - dp(30) - dp(60)  # 标题30dp, 工具栏60dp
-        self.editor_canvas.height = canvas_height
-        self.editor_canvas.pos_hint = {'x': 0, 'top': 1 - dp(30)/height}
-
     def on_slider_x_value(self, instance, value):
         if self._lock_slider_event or not self.editor_canvas.selected_layer or self._base_width_for_slider_scale <= 0:
             return
 
         # 添加调试输出
         print(f"X轴滑块值改变: {value}, 基准宽度: {self._base_width_for_slider_scale}")
-
-        layer = self.editor_canvas.selected_layer
-        old_width, old_height = layer.size
-        old_center_x = layer.x + old_width / 2
-        old_center_y = layer.y + old_height / 2
-
-        new_width = self._base_width_for_slider_scale * value
-        new_height = old_height # Default if not locked
-
-        if self.lock_aspect_ratio_checkbox and self.lock_aspect_ratio_checkbox.active and self._base_height_for_slider_scale > 0:
-            # 计算宽高比以保持比例
-            aspect_ratio = self._base_width_for_slider_scale / self._base_height_for_slider_scale
-            if aspect_ratio > 0: # Avoid division by zero if aspect_ratio is somehow zero
-                 new_height = new_width / aspect_ratio
-                 self._lock_slider_event = True
-                 self.slider_y.value = new_height / self._base_height_for_slider_scale if self._base_height_for_slider_scale > 0 else 1.0
-                 self._lock_slider_event = False
-                 print(f"锁定宽高比: 根据X轴滑块更新Y轴值为 {self.slider_y.value}")
-            else: # Fallback if aspect ratio is invalid
-                new_height = self._base_height_for_slider_scale * self.slider_y.value # Use current Y slider
-        else: # Not locked, use current Y slider value to determine target height based on its own base
-            if self._base_height_for_slider_scale > 0:
-                new_height = self._base_height_for_slider_scale * self.slider_y.value
-            print(f"未锁定宽高比: 保持Y值 {self.slider_y.value}, 高度 {new_height}")
-
-        min_dimension = 10
-        new_width = max(new_width, min_dimension)
-        new_height = max(new_height, min_dimension)
         
-        # 应用新尺寸，保持图层中心点不变
-        layer.size = (new_width, new_height)
-        layer.pos = (old_center_x - new_width / 2, old_center_y - new_height / 2)
-        
-        print(f"应用新尺寸: 宽度={new_width}, 高度={new_height}, 位置={layer.pos}")
+        # 调用统一形变函数
+        self.transform_layer_size(scale_x=value)
 
     def on_slider_y_value(self, instance, value):
         if self._lock_slider_event or not self.editor_canvas.selected_layer or self._base_height_for_slider_scale <= 0:
@@ -1065,40 +765,9 @@ class ImageEditorApp(App):
 
         # 添加调试输出
         print(f"Y轴滑块值改变: {value}, 基准高度: {self._base_height_for_slider_scale}")
-
-        layer = self.editor_canvas.selected_layer
-        old_width, old_height = layer.size
-        old_center_x = layer.x + old_width / 2
-        old_center_y = layer.y + old_height / 2
-
-        new_height = self._base_height_for_slider_scale * value
-        new_width = old_width # Default if not locked
-
-        if self.lock_aspect_ratio_checkbox and self.lock_aspect_ratio_checkbox.active and self._base_width_for_slider_scale > 0:
-            # 计算宽高比以保持比例
-            aspect_ratio = self._base_width_for_slider_scale / self._base_height_for_slider_scale
-            if aspect_ratio > 0: # Check if aspect_ratio is valid
-                new_width = new_height * aspect_ratio
-                self._lock_slider_event = True
-                self.slider_x.value = new_width / self._base_width_for_slider_scale if self._base_width_for_slider_scale > 0 else 1.0
-                self._lock_slider_event = False
-                print(f"锁定宽高比: 根据Y轴滑块更新X轴值为 {self.slider_x.value}")
-            else: # Fallback
-                new_width = self._base_width_for_slider_scale * self.slider_x.value # Use current X slider
-        else: # Not locked
-            if self._base_width_for_slider_scale > 0:
-                new_width = self._base_width_for_slider_scale * self.slider_x.value
-            print(f"未锁定宽高比: 保持X值 {self.slider_x.value}, 宽度 {new_width}")
-
-        min_dimension = 10
-        new_width = max(new_width, min_dimension)
-        new_height = max(new_height, min_dimension)
-
-        # 应用新尺寸，保持图层中心点不变
-        layer.size = (new_width, new_height)
-        layer.pos = (old_center_x - new_width / 2, old_center_y - new_height / 2)
         
-        print(f"应用新尺寸: 宽度={new_width}, 高度={new_height}, 位置={layer.pos}")
+        # 调用统一形变函数
+        self.transform_layer_size(scale_y=value)
 
     def on_lock_aspect_ratio_change(self, checkbox, value):
         """处理锁定宽高比复选框状态变化"""
@@ -1119,6 +788,49 @@ class ImageEditorApp(App):
         # 如果取消锁定，允许独立缩放
         if not value:
             print("已解除宽高比锁定，X和Y可以独立缩放")
+    
+    def _update_text_size(self, instance, size):
+        """更新Label的text_size以适应其大小"""
+        instance.text_size = (instance.width, None)
+
+    def transform_layer_size(self, scale_x=None, scale_y=None):
+        """统一处理图层形变的函数
+        
+        参数:
+            scale_x: X轴的缩放比例，None表示不改变
+            scale_y: Y轴的缩放比例，None表示不改变
+        """
+        if not self.editor_canvas.selected_layer or self._base_width_for_slider_scale <= 0 or self._base_height_for_slider_scale <= 0:
+            print("无法进行形变：没有选中图层或基准尺寸无效")
+            return False
+            
+        layer = self.editor_canvas.selected_layer
+        # 调用图层的transform_size方法
+        new_size, success = layer.transform_size(
+            self._base_width_for_slider_scale,
+            self._base_height_for_slider_scale,
+            scale_x,
+            scale_y,
+            self.lock_aspect_ratio_checkbox and self.lock_aspect_ratio_checkbox.active
+        )
+        
+        if success and new_size:
+            new_width, new_height = new_size
+            
+            # 根据计算结果更新滑杆值（不触发事件）
+            if scale_x is not None and self.lock_aspect_ratio_checkbox and self.lock_aspect_ratio_checkbox.active:
+                self._lock_slider_event = True
+                self.slider_y.value = new_height / self._base_height_for_slider_scale if self._base_height_for_slider_scale > 0 else 1.0
+                self._lock_slider_event = False
+                print(f"锁定宽高比: 根据X轴更新Y轴值为 {self.slider_y.value}")
+                
+            if scale_y is not None and self.lock_aspect_ratio_checkbox and self.lock_aspect_ratio_checkbox.active:
+                self._lock_slider_event = True
+                self.slider_x.value = new_width / self._base_width_for_slider_scale if self._base_width_for_slider_scale > 0 else 1.0
+                self._lock_slider_event = False
+                print(f"锁定宽高比: 根据Y轴更新X轴值为 {self.slider_x.value}")
+                
+        return success
 
 
 if __name__ == '__main__':
